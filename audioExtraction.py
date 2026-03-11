@@ -19,41 +19,42 @@ def analyze_song():
         return
 
     try:
-        # Load audio file
-        y, sr = librosa.load(file_path, sr=None)
+        # Load audio file (User chooses the file from their computer)
+        audio_data, sample_rate = librosa.load(file_path, sr=None)
 
-        # Basic info
-        duration = librosa.get_duration(y=y, sr=sr)
+        # Gets information on how long the song is and also the sample rate it is in
+        duration = librosa.get_duration(y=audio_data, sr=sample_rate)
 
         # Onset strength envelope
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        onset_env = librosa.onset.onset_strength(y=audio_data, sr=sample_rate)
 
-        # Beat tracking
+        # Tracks the beat and gets an idea of the tempo (BPM)
         tempo, beat_frames = librosa.beat.beat_track(
-            y=y,
-            sr=sr,
+            y=audio_data,
+            sr=sample_rate,
             onset_envelope=onset_env
         )
         tempo_value = float(np.atleast_1d(tempo)[0])
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+        beat_times = librosa.frames_to_time(beat_frames, sr=sample_rate)
 
-        # Onset detection
+        # Finds when noticible things happen in the song (like a drum hit or a guitar strum)
         onset_frames = librosa.onset.onset_detect(
-            y=y,
-            sr=sr,
+            y=audio_data,
+            sr=sample_rate,
             onset_envelope=onset_env
         )
-        onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+        onset_times = librosa.frames_to_time(onset_frames, sr=sample_rate)
 
         # Output results until we input them into the LTSM
         print("\n***AUDIO ANALYSIS PLACEHOLDER OUTPUT***")
         print(f"File: {os.path.basename(file_path)}")
-        print(f"Sample Rate: {sr}")
+        print(f"Sample Rate: {sample_rate}")
         print(f"Duration: {duration:.2f} seconds")
         print(f"Estimated BPM: {tempo_value:.2f}")
-        print(f"Total Beats Detected: {len(beat_frames)}")
-        print(f"Total Onsets Detected: {len(onset_frames)}")
+        print(f"Total Beats: {len(beat_frames)}")
+        print(f"Total Onsets: {len(onset_frames)}")
 
+        # Just did the first 20 beat and onset since this is just a placeholder
         print("\nFirst 20 Beat Times (seconds):")
         print(np.round(beat_times[:20], 3))
 
