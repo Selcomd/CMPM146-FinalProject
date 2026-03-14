@@ -1,11 +1,13 @@
 # Trains the LSTM on the pseudo-labels we generated.
-# Give it an audio file, it builds the timing grid, makes labels for
-# all 5 difficulties, and trains the model to reproduce those patterns
-# from audio features alone. Saves the weights to stepLSTM_model.pth.
+# Give it one or more audio files (or a directory), it builds the timing grid,
+# makes labels for all 5 difficulties, and trains the model to reproduce
+# those patterns from audio features alone. Saves the weights to stepLSTM_model.pth.
 #
 # Usage:
-#   python3 trainModel.py                  (file picker)
-#   python3 trainModel.py path/to/song.mp3
+#   python3 trainModel.py                        (file picker, single file)
+#   python3 trainModel.py path/to/song.mp3        (single file)
+#   python3 trainModel.py song1.mp3 song2.mp3     (multiple files)
+#   python3 trainModel.py path/to/music_folder/   (all audio in directory)
 
 import os
 import sys
@@ -85,8 +87,63 @@ def _build_training_arrays(audio_path: str):
     return np.vstack(all_X), np.vstack(all_Y)  # (N*5, 8) and (N*5, 4)
 
 
-def train_model(audio_path: str, epochs: int = EPOCHS, save_path: str = MODEL_PATH) -> StepLSTM:
-    features, labels = _build_training_arrays(audio_path)
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"}
+
+
+def _collect_audio_paths(paths: list[str]) -> list[str]:
+    """Expand paths into a flat list of audio file paths.
+    If a path is a directory, include all audio files inside it (non-recursive).
+    """
+    collected = []
+    for p in paths:
+        p = os.path.abspath(os.path.expanduser(p))
+        if not os.path.exists(p):
+            print(f"[train] Warning: path does not exist, skipping: {p}")
+            continue
+        if os.path.isfile(p):
+            ext = os.path.splitext(p)[1].lower()
+            if ext in AUDIO_EXTENSIONS:
+                collected.append(p)
+            else:
+                print(f"[train] Warning: not an audio file, skipping: {p}")
+        else:
+            for name in sorted(os.listdir(p)):
+                ext = os.path.splitext(name)[1].lower()
+                if ext in AUDIO_EXTENSIONS:
+                    collected.append(os.path.join(p, name))
+    return collected
+
+
+def _build_training_arrays_multi(audio_paths: list[str]):
+    """Build combined (features, labels) from multiple audio files."""
+    if not audio_paths:
+        raise ValueError("No audio paths provided")
+    all_features = []
+    all_labels = []
+    for path in audio_paths:
+        feat, lab = _build_training_arrays(path)
+        all_features.append(feat)
+        all_labels.append(lab)
+    return np.vstack(all_features), np.vstack(all_labels)
+
+
+def train_model(
+    audio_path_or_paths,
+    epochs: int = EPOCHS,
+    save_path: str = MODEL_PATH,
+) -> StepLSTM:
+    """Train on one or more audio files. Pass a single path string or a list of paths."""
+    if isinstance(audio_path_or_paths, (list, tuple)):
+        paths = _collect_audio_paths(list(audio_path_or_paths))
+        if not paths:
+            raise ValueError("No valid audio files found in the given paths")
+        print(f"[train] Multi-song training on {len(paths)} file(s)")
+        features, labels = _build_training_arrays_multi(paths)
+    else:
+        paths = _collect_audio_paths([audio_path_or_paths])
+        if not paths:
+            raise ValueError("No valid audio file specified")
+        features, labels = _build_training_arrays(paths[0])
 
     dataset = StepDataset(features, labels)
     loader  = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=False)
@@ -133,7 +190,20 @@ def load_model(path: str = MODEL_PATH) -> StepLSTM:
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        audio_file = sys.argv[1]
+        # One or more paths: files and/or directories
+        paths = sys.argv[1:]
+        if paths[0] == "--dry-run":
+            # Only collect and print paths, no training (for testing path expansion)
+            paths = paths[1:] if len(paths) > 1 else []
+            if not paths:
+                print("Usage: python3 trainModel.py --dry-run <path> [path ...]")
+                sys.exit(1)
+            collected = _collect_audio_paths(paths)
+            print(f"Collected {len(collected)} audio file(s):")
+            for p in collected:
+                print(f"  {p}")
+            sys.exit(0)
+        train_model(paths)
     else:
         import tkinter as tk
         from tkinter import filedialog
@@ -145,8 +215,8 @@ if __name__ == "__main__":
         )
         root.destroy()
 
-    if not audio_file:
-        print("No file selected.")
-        sys.exit(1)
+        if not audio_file:
+            print("No file selected.")
+            sys.exit(1)
 
-    train_model(audio_file)
+        train_model(audio_file)
