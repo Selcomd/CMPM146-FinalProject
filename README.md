@@ -10,11 +10,13 @@ Ethan Cao, Yahir Rico, Evangelene Stanley, Bolor Battulga
 
 ## How to run
 
-Train the LSTM on a song:
+Train the LSTM on one or more songs:
 ```bash
 python3 trainModel.py path/to/song.mp3
+python3 trainModel.py song1.mp3 song2.mp3 song3.wav
+python3 trainModel.py path/to/music_folder/
 ```
-Or just run it without arguments and a file picker will open.
+Or run without arguments and a file picker will open (single file). A directory path loads all supported audio files (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`) from that folder.
 
 For just audio analysis:
 ```bash
