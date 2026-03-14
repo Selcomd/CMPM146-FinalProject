@@ -1,7 +1,10 @@
-# Usage:python3 smGenerator.py path/to/song.mp3
-
 # Arrow columns:  0=Left  1=Down  2=Up  3=Right
+#
+# Usage:
+#   python3 smGenerator.py path/to/song.mp3
+#   python3 smGenerator.py song.mp3 -d Medium,Hard
 
+import argparse
 import os
 import sys
 import numpy as np
@@ -201,9 +204,32 @@ def generate_sm(
     return out_path
 
 
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate StepMania .sm beatmaps from audio using the trained LSTM."
+    )
+    parser.add_argument(
+        "audio",
+        nargs="?",
+        default=None,
+        help="Path to audio file (.mp3, .wav, etc.). Omit to use file picker.",
+    )
+    parser.add_argument(
+        "-d", "--difficulties",
+        default=None,
+        help="Comma-separated difficulties to generate, e.g. Medium,Hard. Default: all 5.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        audio_file = sys.argv[1]
+    args = _parse_args()
+
+    if args.audio:
+        audio_file = args.audio
+        if not os.path.isfile(audio_file):
+            print(f"Error: file not found: {audio_file}")
+            sys.exit(1)
     else:
         import tkinter as tk
         from tkinter import filedialog
@@ -215,10 +241,25 @@ if __name__ == "__main__":
         )
         root.destroy()
 
-    if not audio_file:
-        print("No file selected.")
-        sys.exit(1)
+        if not audio_file:
+            print("No file selected.")
+            sys.exit(1)
 
-    model    = load_model()
-    out_path = generate_sm(audio_file, model, output_dir="./output")
+    difficulties = None
+    if args.difficulties:
+        difficulties = [s.strip() for s in args.difficulties.split(",")]
+        valid = set(THRESHOLDS.keys())
+        invalid = [d for d in difficulties if d not in valid]
+        if invalid:
+            print(f"Error: invalid difficulty names: {invalid}")
+            print(f"Valid: {', '.join(sorted(valid))}")
+            sys.exit(1)
+
+    model = load_model()
+    out_path = generate_sm(
+        audio_file,
+        model,
+        output_dir="./output",
+        difficulties=difficulties,
+    )
     print(f"\nDone! StepMania file saved to: {out_path}")
