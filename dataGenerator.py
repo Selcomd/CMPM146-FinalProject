@@ -10,11 +10,11 @@ import numpy as np
 
 # How dense each difficulty should be — fraction of 16th-note slots with a step
 DIFFICULTY_SETTINGS = {
-    "Beginner":  {"target_density": 0.15, "jump_boost": 0.92, "min_gap": 4},
-    "Easy":      {"target_density": 0.25, "jump_boost": 0.85, "min_gap": 3},
-    "Medium":    {"target_density": 0.38, "jump_boost": 0.75, "min_gap": 2},
-    "Hard":      {"target_density": 0.50, "jump_boost": 0.65, "min_gap": 2},
-    "Challenge": {"target_density": 0.62, "jump_boost": 0.55, "min_gap": 1},
+    "Beginner":  {"target_density": 0.05, "jump_boost": 0.92, "min_gap": 3},
+    "Easy":      {"target_density": 0.08, "jump_boost": 0.85, "min_gap": 3},
+    "Medium":    {"target_density": 0.20, "jump_boost": 0.75, "min_gap": 2},
+    "Hard":      {"target_density": 0.40, "jump_boost": 0.65, "min_gap": 2},
+    "Challenge": {"target_density": 0.60, "jump_boost": 0.55, "min_gap": 1},
 }
 
 # Cycle through these columns for single arrows so feet naturally alternate

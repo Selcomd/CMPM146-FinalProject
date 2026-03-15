@@ -67,18 +67,138 @@ def predict_arrows(model: StepLSTM, grid: list, seq_len: int = 64) -> np.ndarray
     return probs
 
 
-def probs_to_arrows(probs: np.ndarray, threshold: float) -> np.ndarray:
-    arrows = (probs >= threshold).astype(np.float32)
+def probs_to_arrows(probs: np.ndarray, threshold: float, difficulty: str = "Medium") -> np.ndarray:
+    arrows = np.zeros((len(probs), 4), dtype=np.float32)
 
-    for col in range(4):
-        col_arr = arrows[:, col]
-        last_on = -2
-        for i in range(len(col_arr)):
-            if col_arr[i] == 1.0:
-                if i - last_on < 2:
-                    arrows[i, col] = 0.0
-                else:
-                    last_on = i
+    col_counts = np.zeros(4, dtype=np.int32)
+    recent_cols = []
+    recent_pairs = []
+
+    last_note_idx = -999
+    last_single = None
+    last_pair = None
+
+    if difficulty == "Beginner":
+        allowed_pairs = set()
+        min_gap = 3          # minimum distance between notes
+        target_gap = 5       # preferred spacing
+        max_gap = 7          # force a note if we wait this long
+        recent_window = 4
+    elif difficulty == "Easy":
+        allowed_pairs = {(0, 3)}
+        min_gap = 2
+        target_gap = 4
+        max_gap = 6
+        recent_window = 6
+    elif difficulty == "Medium":
+        allowed_pairs = {(0, 3), (0, 2), (1, 3)}
+        min_gap = 1
+        target_gap = 3
+        max_gap = 5
+        recent_window = 8
+    else:
+        allowed_pairs = {(0, 3), (0, 2), (1, 3)}
+        min_gap = 1
+        target_gap = 2
+        max_gap = 4
+        recent_window = 8
+
+    center_cols = {1, 2}
+    side_cols = {0, 3}
+
+    for i, p in enumerate(probs):
+        time_since_last = i - last_note_idx
+
+        # Normal candidates
+        candidate_cols = [c for c in range(4) if p[c] >= threshold]
+
+        # If we're getting close to too much dead space, relax a little
+        if not candidate_cols and time_since_last >= target_gap:
+            relaxed_threshold = threshold * 0.92
+            candidate_cols = [c for c in range(4) if p[c] >= relaxed_threshold]
+
+        # If we've waited too long, force the best available column
+        if not candidate_cols and time_since_last >= max_gap:
+            best_any = int(np.argmax(p))
+            candidate_cols = [best_any]
+
+        if not candidate_cols or time_since_last < min_gap:
+            continue
+
+        avg_count = np.mean(col_counts) if np.sum(col_counts) > 0 else 0.0
+
+        recent_counts = np.zeros(4, dtype=np.int32)
+        for c in recent_cols[-recent_window:]:
+            recent_counts[c] += 1
+
+        side_total = col_counts[0] + col_counts[3]
+        center_total = col_counts[1] + col_counts[2]
+
+        scored = []
+        for c in candidate_cols:
+            score = float(p[c])
+
+            col_mean = np.mean(col_counts) if np.sum(col_counts) > 0 else 0.0
+            col_diff = col_counts[c] - col_mean
+            score -= 0.10 * col_diff
+
+            side_total = col_counts[0] + col_counts[3]
+            center_total = col_counts[1] + col_counts[2]
+            if c in side_cols and side_total + 2 < center_total:
+                score += 0.05
+
+            if c == last_single:
+                score -= 0.18
+
+            score -= 0.08 * recent_counts[c]
+
+            scored.append((score, c))
+
+        scored.sort(reverse=True)
+        best_col = scored[0][1]
+
+        placed_jump = False
+        if (
+                allowed_pairs
+                and len(candidate_cols) >= 2
+                and max(min_gap, 3) <= time_since_last < max_gap  # don't force jumps in dead-space recovery
+        ):
+            second_choices = [c for _, c in scored[1:]]
+
+            for second_col in second_choices:
+                pair = tuple(sorted((best_col, second_col)))
+
+                if pair not in allowed_pairs:
+                    continue
+                if pair == last_pair or pair in recent_pairs[-3:]:
+                    continue
+                if pair == (1, 2):
+                    continue
+                if not ({best_col, second_col} & side_cols):
+                    continue
+
+                if p[best_col] >= threshold and p[second_col] >= threshold * 0.98:
+                    arrows[i, best_col] = 1.0
+                    arrows[i, second_col] = 1.0
+                    col_counts[best_col] += 1
+                    col_counts[second_col] += 1
+                    recent_cols.extend([best_col, second_col])
+                    recent_pairs.append(pair)
+                    last_pair = pair
+                    last_single = None
+                    last_note_idx = i
+                    placed_jump = True
+                    break
+
+        if placed_jump:
+            continue
+
+        arrows[i, best_col] = 1.0
+        col_counts[best_col] += 1
+        recent_cols.append(best_col)
+        last_single = best_col
+        last_pair = None
+        last_note_idx = i
 
     return arrows
 
@@ -186,7 +306,7 @@ def generate_sm(
     all_arrows = {}
     for diff in difficulties:
         threshold         = THRESHOLDS[diff]
-        arrows            = probs_to_arrows(probs, threshold)
+        arrows            = probs_to_arrows(probs, threshold, diff)
         density           = arrows.any(axis=1).mean()
         all_arrows[diff]  = arrows
         print(f"[smGenerator] {diff:10s}  threshold={threshold}  step_density={density:.2f}")
